@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
+
 const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
