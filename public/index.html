@@ -78,9 +78,7 @@
                 useModal: true,
                 successCallback: (res) => {
                     console.log("Success!", res);
-                    // Store session token in cookie for the BFF to find later
-                    document.cookie = `DV-ST=${res.sessionToken}; Path=/; Secure; SameSite=Strict`;
-                    alert("Login Successful!");
+                    
                 },
                 errorCallback: (err) => console.error("Widget Error:", err),
                 onCloseModal: () => console.log("Modal Closed")
