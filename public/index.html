@@ -6,6 +6,9 @@
     <title>ACME // Secure Auth</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://assets.pingone.com/davinci/latest/davinci.css" />
+<script src="https://assets.pingone.com/davinci/latest/davinci.js"></script>
+    
     <style>
         body { font-family: 'JetBrains Mono', monospace; }
         .glow:hover { box-shadow: 0 0 15px rgba(52, 211, 153, 0.4); }
@@ -38,15 +41,59 @@
         </div>
     </div>
 
+    <div id="widget-container" class="dvWidget"></div>
+
+
     <footer class="mt-12 text-zinc-700 text-[10px] uppercase tracking-[0.2em]">
         Encrypted via PingOne DaVinci // BFF Pattern
     </footer>
 
     <script>
-        document.getElementById('loginBtn').addEventListener('click', () => {
-            console.log("Redirecting to DaVinci flow...");
-            alert("This is where the DaVinci Widget will trigger!");
-        });
-    </script>
+    const POLICY_ID = "YOUR_POLICY_ID_HERE"; // Policy ID is fine on frontend
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('loginBtn');
+        btn.innerText = "INITIALIZING...";
+        
+        try {
+            // 1. Get token from our BFF
+            const response = await fetch('/dvtoken', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ policyId: POLICY_ID })
+            });
+            
+            const { token, companyId, apiRoot } = await response.json();
+
+            // 2. Initialize Widget
+            const props = {
+                config: {
+                    method: 'runFlow',
+                    apiRoot: apiRoot,
+                    accessToken: token,
+                    companyId: companyId,
+                    policyId: POLICY_ID,
+                    staggerFlowExecutions: false
+                },
+                useModal: false,
+                successCallback: (res) => {
+                    console.log("Success!", res);
+                    // Store session token in cookie for the BFF to find later
+                    document.cookie = `DV-ST=${res.sessionToken}; Path=/; Secure; SameSite=Strict`;
+                    alert("Login Successful!");
+                },
+                errorCallback: (err) => console.error("Widget Error:", err),
+                onCloseModal: () => console.log("Modal Closed")
+            };
+
+            // 3. Render
+            davinci.skRenderScreen(document.getElementById('widget-container'), props);
+            btn.style.display = 'none'; // Hide button once widget loads
+
+        } catch (err) {
+            console.error("BFF Connection Failed:", err);
+        }
+    });
+</script>
 </body>
 </html>

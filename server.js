@@ -1,11 +1,68 @@
 const express = require('express');
-const path = require('path');
+const cors = require('cors');
+const fetch = require('node-fetch');
+const cookieParser = require('cookie-parser');
+require('dotenv').config();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from the 'public' directory
+// Environment Variables needed in Railway:
+// DV_COMPANY_ID, DV_API_KEY, DV_REGION (e.g., 'com', 'eu', 'asia')
+const REGION = process.env.DV_REGION || 'eu'; 
+const API_ROOT = `https://auth.pingone.${REGION}`;
+const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
+
+app.use(cookieParser());
+app.use(express.json());
 app.use(express.static('public'));
 
-app.listen(PORT, () => {
-    console.log(`Acme BFF running at http://localhost:${PORT}`);
+// Secure CORS - Only allow your Railway domain or localhost
+app.use(cors({
+    origin: process.env.PUBLIC_URL || `http://localhost:${PORT}`,
+    credentials: true // Required to handle DaVinci session cookies
+}));
+
+app.post('/dvtoken', async (req, res) => {
+    try {
+        const { policyId } = req.body;
+        const companyId = process.env.DV_COMPANY_ID;
+        const apiKey = process.env.DV_API_KEY;
+
+        // Construct the body for the SDK Token request
+        let body = { policyId: policyId };
+
+        // If a session cookie exists, pass it to maintain continuity
+        if (req.cookies['DV-ST']) {
+            body.global = { sessionToken: req.cookies['DV-ST'] };
+        }
+
+        const response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-SK-API-KEY': apiKey
+            },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+            return res.status(500).json({ error: data.message || "DaVinci Error" });
+        }
+
+        // Send the token and config back to the frontend
+        res.json({
+            token: data.access_token,
+            companyId: companyId,
+            apiRoot: API_ROOT
+        });
+
+    } catch (error) {
+        console.error("BFF Error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
 });
+
+app.listen(PORT, () => console.log(`Acme BFF live on port ${PORT}`));
