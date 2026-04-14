@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,13 +8,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://assets.pingone.com/davinci/latest/davinci.css" />
-<script src="https://assets.pingone.com/davinci/latest/davinci.js"></script>
-    
+    <script src="https://assets.pingone.com/davinci/latest/davinci.js"></script>
+
     <style>
-        body { font-family: 'JetBrains Mono', monospace; }
-        .glow:hover { box-shadow: 0 0 15px rgba(52, 211, 153, 0.4); }
+        body {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glow:hover {
+            box-shadow: 0 0 15px rgba(52, 211, 153, 0.4);
+        }
     </style>
 </head>
+
 <body class="bg-black text-zinc-200 min-h-screen flex flex-col items-center justify-center p-6">
 
     <div class="mb-12 text-center">
@@ -29,7 +36,8 @@
             <p class="text-zinc-400 text-sm">Please authenticate to access the secure console.</p>
         </div>
 
-        <button id="loginBtn" class="glow w-full py-4 bg-emerald-500 text-black font-bold rounded-lg transition-all active:scale-95 hover:bg-emerald-400">
+        <button id="loginBtn"
+            class="glow w-full py-4 bg-emerald-500 text-black font-bold rounded-lg transition-all active:scale-95 hover:bg-emerald-400">
             LOGIN
         </button>
 
@@ -49,51 +57,60 @@
     </footer>
 
     <script>
-    const POLICY_ID = "53e36f1eacf651f2a80d2428cb5861ec"; // Policy ID is fine on frontend
+        const POLICY_ID = "53e36f1eacf651f2a80d2428cb5861ec"; // Policy ID is fine on frontend
 
-    document.getElementById('loginBtn').addEventListener('click', async () => {
-        const btn = document.getElementById('loginBtn');
-        btn.innerText = "INITIALIZING...";
-        
-        try {
-            // 1. Get token from our BFF
-            const response = await fetch('/dvtoken', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ policyId: POLICY_ID })
-            });
-            
-            const { token, companyId, apiRoot } = await response.json();
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('loginBtn');
+            btn.innerText = "INITIALISING...";
 
-            // 2. Initialize Widget
-            const props = {
-                config: {
-                    method: 'runFlow',
-                    apiRoot: apiRoot,
-                    accessToken: token,
-                    companyId: companyId,
-                    policyId: POLICY_ID,
-                    staggerFlowExecutions: false
-                },
-                useModal: true,
-                successCallback: (res) => {
-                    console.log("Success!", res);
-                    var token = res.additionalProperties.sessionToken;
-                    alert(token);
-                    
-                },
-                errorCallback: (err) => console.error("Widget Error:", err),
-                onCloseModal: () => console.log("Modal Closed")
-            };
+            try {
+                // 1. Get token from our BFF
+                const response = await fetch('/dvtoken', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policyId: POLICY_ID })
+                });
 
-            // 3. Render
-            davinci.skRenderScreen(document.getElementById('widget-container'), props);
-            btn.style.display = 'none'; // Hide button once widget loads
+                const { token, companyId, apiRoot } = await response.json();
 
-        } catch (err) {
-            console.error("BFF Connection Failed:", err);
-        }
-    });
-</script>
+                const successCallback = async (response) => {
+                    console.log("Success!", response);
+                    var sessionToken = response.additionalProperties.sessionToken;
+                    const saveResponse = await fetch('/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sessionToken: response.sessionToken
+                        })
+                    });
+                };
+
+                // 2. Initialize Widget
+                const props = {
+                    config: {
+                        method: 'runFlow',
+                        apiRoot: apiRoot,
+                        accessToken: token,
+                        companyId: companyId,
+                        policyId: POLICY_ID,
+                        staggerFlowExecutions: false
+                    },
+                    useModal: true,
+                    successCallback: successCallback(res),
+
+                    errorCallback: (err) => console.error("Widget Error:", err),
+                    onCloseModal: () => console.log("Modal Closed")
+                };
+
+                // 3. Render
+                davinci.skRenderScreen(document.getElementById('widget-container'), props);
+                btn.style.display = 'none'; // Hide button once widget loads
+
+            } catch (err) {
+                console.error("BFF Connection Failed:", err);
+            }
+        });
+    </script>
 </body>
+
 </html>
