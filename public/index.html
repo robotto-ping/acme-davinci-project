@@ -77,8 +77,9 @@
                 },
                 useModal: true,
                 successCallback: (res) => {
-                    alert("succss")
                     console.log("Success!", res);
+                    var token = res.additionalProperties.sessionToken;
+                    alert(token);
                     
                 },
                 errorCallback: (err) => console.error("Widget Error:", err),
