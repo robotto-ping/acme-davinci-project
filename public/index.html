@@ -76,11 +76,12 @@
                 const successCallback = async (response) => {
                     console.log("Success!", response);
                     var sessionToken = response.additionalProperties.sessionToken;
+                    console.log("sessionToken!", sessionToken);
                     const saveResponse = await fetch('/auth/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            sessionToken: response.sessionToken
+                            sessionToken: sessionToken
                         })
                     });
                 };
