@@ -65,4 +65,17 @@ app.post('/dvtoken', async (req, res) => {
     }
 });
 
+app.post('/auth/login', (req, res) => {
+    const { sessionToken } = req.body;
+
+    if (!sessionToken) return res.status(400).send("Missing token");
+
+    // Store tokens in the server-side session
+    // The browser never sees these!
+   // req.session.dvSessionToken = sessionToken;
+
+
+    res.json({ message: "Session established" });
+});
+
 app.listen(PORT, () => console.log(`Acme BFF live on port ${PORT}`));
