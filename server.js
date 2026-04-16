@@ -13,6 +13,7 @@ const REGION = process.env.DV_REGION || 'eu';
 const API_ROOT = `https://auth.pingone.${REGION}`;
 const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
 
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.static('public'));
@@ -95,7 +96,7 @@ app.post('/auth/login', async (req, res) => {
         const authHeader = 'Bearer ' + sdkToken;
         console.debug(authHeader);
 
-        response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/policy/${policyId}/start`, {
+        response = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${policyId}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
