@@ -77,7 +77,7 @@ app.post('/auth/login', async (req, res) => {
         let body = { policyId: policyId };
         body.global = { sessionToken: sessionToken };
 
-        const response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
+        let response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
