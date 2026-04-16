@@ -89,7 +89,7 @@ app.post('/auth/login', async (req, res) => {
         const data = await response.json();
         const sdkToken = data.access_token;
 
-        console.info(sdkToken);
+        console.debug(sdkToken);
 
         body = {}; 
 
