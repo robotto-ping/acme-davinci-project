@@ -92,14 +92,16 @@ app.post('/auth/login', async (req, res) => {
         console.debug(sdkToken);
 
         body = {}; 
+        const authHeader = 'Bearer ' + sdkToken;
+        console.debug(authHeader);
 
         response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/policy/${policyId}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + sdkToken
-            },
-            body: JSON.stringify(body)
+                'Authorization': authHeader
+            }//,
+            //body: JSON.stringify(body)
         });
 
         console.info(response);
