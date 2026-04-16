@@ -104,10 +104,12 @@ app.post('/auth/login', async (req, res) => {
             }//,
             //body: JSON.stringify(body)
         });
+        
+         const responsebody = await response.json();
 
-        console.info(response);
+        console.info(responsebody);
 
-        res.json({ message: "Session established" });
+        res.json({ token: responsebody.access_token });
 
     } catch (error) {
         console.error("BFF Error:", error);
