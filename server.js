@@ -173,7 +173,11 @@ app.get('/auth/status', async (req, res) => {
                 //we have a valid access token
                 res.json({ "valid_token": true });
             } else {
-                
+                if (session_token != null) {
+
+                } else {
+                    res.json({ "valid_session": false });
+                }
             }
         } else {
             res.json({ "error": true });
