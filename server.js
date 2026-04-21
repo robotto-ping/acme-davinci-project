@@ -158,12 +158,13 @@ app.get('/auth/status', async (req, res) => {
         if (access_token != null) {
             const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
             const params = new URLSearchParams();
+            const authHeader = Buffer.from(`${clientID}:${secret}`).toString('base64');
             params.append('token', access_token);
             const response = await fetch(introspectURI, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': `Basic ${base64.encode(`${clientID}:${secret}`)}`
+                    'Authorization': `Basic ${authHeader}`
                 },
                 body: params.toString()
             });
