@@ -68,7 +68,7 @@
 
             try {
                 // 1. Get token from our BFF
-                const response = await fetch('/status', {
+                const response = await fetch('/auth/status', {
                     method: 'GET',
                     headers: { 'Content-Type': 'application/json' }
                 });
