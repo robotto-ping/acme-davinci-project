@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const app = express();
+app.enable('trust proxy');
 const PORT = process.env.PORT || 3000;
 
 // Environment Variables needed in Railway:
@@ -126,8 +127,14 @@ app.post('/auth/login', async (req, res) => {
         req.session.access_token = responsebody.access_token;
         req.session.id_token = responsebody.id_token;
         req.session.sessionToken = responsebody.sessionToken
-        console.debug('ACCESS TOKEN FROM SESSION')
-        console.debug(req.session.access_token)
+        req.session.save((err) => {
+            if (err) {
+                console.error("Session save error:", err);
+                return res.status(500).send("Internal Server Error");
+            }
+            console.debug('Session saved. Token:', req.session.access_token);
+            res.json({ result: 'ok' });
+        });
 
 
         res.json({ result: 'ok' });
