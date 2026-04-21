@@ -37,38 +37,7 @@ app.use(cors({
     credentials: true // Required to handle DaVinci session cookies
 }));
 
-app.post('/status', async (req, res) => {
-    try {
-        const access_token = req.session.access_token;
-        const id_token = req.session.id_token;
-        const sessionToken = req.session.sessionToken;
-        const clientID = 'ee68d47a-990b-4d18-9f2e-2ac23a0b63e2'
-        const secret = 'mD.HbNzATUaNgmRKekmM~ab89IugvGQRJR-SUjbVMLGY_V4YQ9OT85to9lyCn0Aq'
 
-        if (access_token != null) {
-            const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
-            const params = new URLSearchParams();
-            params.append(token, access_token);
-            const response = await fetch(introspectURI, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Authorization': `Basic ${base64.encode(`${clientID}:${secret}`)}`
-                },
-                body: params.toString()
-            });
-            const data = await response.json();
-            console.info(data);
-            res.json(data);
-        } else {
-
-        }
-
-    } catch (error) {
-        console.error("BFF Error:", error);
-        res.status(500).json({ error: "Internal Server Error" });
-    }
-});
 
 app.post('/dvtoken', async (req, res) => {
     try {
@@ -159,6 +128,40 @@ app.post('/auth/login', async (req, res) => {
         req.session.sessionToken = responsebody.sessionToken
 
         res.json({ result: 'ok' });
+
+    } catch (error) {
+        console.error("BFF Error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
+
+
+app.get('/auth/status', async (req, res) => {
+    try {
+        const access_token = req.session.access_token;
+        const id_token = req.session.id_token;
+        const sessionToken = req.session.sessionToken;
+        const clientID = 'ee68d47a-990b-4d18-9f2e-2ac23a0b63e2'
+        const secret = 'mD.HbNzATUaNgmRKekmM~ab89IugvGQRJR-SUjbVMLGY_V4YQ9OT85to9lyCn0Aq'
+
+        if (access_token != null) {
+            const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
+            const params = new URLSearchParams();
+            params.append(token, access_token);
+            const response = await fetch(introspectURI, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${base64.encode(`${clientID}:${secret}`)}`
+                },
+                body: params.toString()
+            });
+            const data = await response.json();
+            console.info(data);
+            res.json(data);
+        } else {
+            res.json({ "error": true });
+        }
 
     } catch (error) {
         console.error("BFF Error:", error);
