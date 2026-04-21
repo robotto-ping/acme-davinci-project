@@ -158,7 +158,7 @@ app.get('/auth/status', async (req, res) => {
         if (access_token != null) {
             const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
             const params = new URLSearchParams();
-            params.append(token, access_token);
+            params.append('token', access_token);
             const response = await fetch(introspectURI, {
                 method: 'POST',
                 headers: {
