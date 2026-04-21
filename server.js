@@ -126,6 +126,9 @@ app.post('/auth/login', async (req, res) => {
         req.session.access_token = responsebody.access_token;
         req.session.id_token = responsebody.id_token;
         req.session.sessionToken = responsebody.sessionToken
+        console.debug('ACCESS TOKEN FROM SESSION')
+        console.debug(req.session.access_token)
+
 
         res.json({ result: 'ok' });
 
