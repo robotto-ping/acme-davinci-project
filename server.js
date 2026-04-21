@@ -14,15 +14,61 @@ const API_ROOT = `https://auth.pingone.${REGION}`;
 const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
 
 
+const session = require('express-session');
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.static('public'));
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'acme-secret-key', // Use a long random string in Railway
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        secure: true, // Required for HTTPS/Railway
+        sameSite: 'strict',
+        maxAge: 3600000 // 1 hour
+    }
+}));
 
 // Secure CORS - Only allow your Railway domain or localhost
 app.use(cors({
     origin: process.env.PUBLIC_URL || `http://localhost:${PORT}`,
     credentials: true // Required to handle DaVinci session cookies
 }));
+
+app.post('/status', async (req, res) => {
+    try {
+        const access_token = req.session.access_token;
+        const id_token = req.session.id_token;
+        const sessionToken = req.session.sessionToken;
+        const clientID = 'ee68d47a-990b-4d18-9f2e-2ac23a0b63e2'
+        const secret = 'mD.HbNzATUaNgmRKekmM~ab89IugvGQRJR-SUjbVMLGY_V4YQ9OT85to9lyCn0Aq'
+
+        if (access_token != null) {
+            const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
+            const params = new URLSearchParams();
+            params.append(token, access_token);
+            const response = await fetch(introspectURI, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': `Basic ${base64.encode(`${clientID}:${secret}`)}`
+                },
+                body: params.toString()
+            });
+            const data = await response.json();
+            console.info(data);
+            res.json(data);
+        } else {
+
+        }
+
+    } catch (error) {
+        console.error("BFF Error:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
 
 app.post('/dvtoken', async (req, res) => {
     try {
@@ -92,7 +138,7 @@ app.post('/auth/login', async (req, res) => {
 
         console.debug(sdkToken);
 
-        body = {}; 
+        body = {};
         const authHeader = 'Bearer ' + sdkToken;
         console.debug(authHeader);
 
@@ -104,12 +150,15 @@ app.post('/auth/login', async (req, res) => {
             }//,
             //body: JSON.stringify(body)
         });
-        
-         const responsebody = await response.json();
+
+        const responsebody = await response.json();
 
         console.info(responsebody);
+        req.session.access_token = responsebody.access_token;
+        req.session.id_token = responsebody.id_token;
+        req.session.sessionToken = responsebody.sessionToken
 
-        res.json({ token: responsebody.access_token });
+        res.json({ result: 'ok' });
 
     } catch (error) {
         console.error("BFF Error:", error);
