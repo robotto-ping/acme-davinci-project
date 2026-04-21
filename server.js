@@ -127,14 +127,14 @@ app.post('/auth/login', async (req, res) => {
         req.session.access_token = responsebody.access_token;
         req.session.id_token = responsebody.id_token;
         req.session.sessionToken = responsebody.sessionToken
-        req.session.save((err) => {
+        /*req.session.save((err) => {
             if (err) {
                 console.error("Session save error:", err);
                 return res.status(500).send("Internal Server Error");
             }
             console.debug('Session saved. Token:', req.session.access_token);
             res.json({ result: 'ok' });
-        });
+        }); */
 
 
         res.json({ result: 'ok' });
