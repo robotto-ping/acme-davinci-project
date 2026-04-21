@@ -143,7 +143,8 @@ app.get('/auth/status', async (req, res) => {
         const sessionToken = req.session.sessionToken;
         const clientID = 'ee68d47a-990b-4d18-9f2e-2ac23a0b63e2'
         const secret = 'mD.HbNzATUaNgmRKekmM~ab89IugvGQRJR-SUjbVMLGY_V4YQ9OT85to9lyCn0Aq'
-
+        console.debug('ACCESS TOKEN FROM SESSION')
+        console.debug(access_token)
         if (access_token != null) {
             const introspectURI = 'https://auth.pingone.eu/e42b4943-0641-4a9d-ae63-5f9ede418fc1/as/introspect';
             const params = new URLSearchParams();
