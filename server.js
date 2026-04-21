@@ -169,8 +169,12 @@ app.get('/auth/status', async (req, res) => {
                 body: params.toString()
             });
             const data = await response.json();
-            console.info(data);
-            res.json(data);
+            if (data.active == true) {
+                //we have a valid access token
+                res.json({ "valid_token": true });
+            } else {
+                
+            }
         } else {
             res.json({ "error": true });
         }
