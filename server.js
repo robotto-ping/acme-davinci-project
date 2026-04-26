@@ -220,6 +220,11 @@ app.post('/auth/login', async (req, res) => {
         req.session.id_token = tokens.id_token;
         req.session.dv_session_token = tokens.sessionToken;
 
+        logger('LOGIN', `access_token=: ${access_token}`);
+        logger('LOGIN', `refresh_token=: ${refresh_token}`);
+        logger('LOGIN', `id_token=: ${id_token}`);
+        logger('LOGIN', `dv_session_token=: ${dv_session_token}`);
+
         req.session.save((err) => {
             logger('LOGIN_HANDOFF', 'Session persisted. Login Complete.');
             res.json({ result: 'ok' });
