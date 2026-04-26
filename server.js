@@ -31,15 +31,15 @@ app.use(session({
     name: 'acme_session',
     cookie: {
         httpOnly: true,
-        secure: true, 
+        secure: true,
         sameSite: 'lax',
-        maxAge: 3600000 
+        maxAge: 3600000
     }
 }));
 
 app.use(cors({
     origin: process.env.PUBLIC_URL || `http://localhost:${PORT}`,
-    credentials: true 
+    credentials: true
 }));
 
 app.use(express.static('public'));
@@ -58,7 +58,7 @@ async function introspectToken(token) {
     const introspectURI = `${API_ROOT}/${process.env.DV_COMPANY_ID}/as/introspect`;
 
     const authHeader = Buffer.from(`${process.env.CLIENT_ID}:${process.env.CLIENT_SECRET}`).toString('base64');
-    
+
     const params = new URLSearchParams({ token: token });
     const response = await fetch(introspectURI, {
         method: 'POST',
@@ -69,8 +69,8 @@ async function introspectToken(token) {
         body: params.toString()
     });
 
-logger('INTROSPECT', `Token=: ${token}`);
-logger('INTROSPECT', `Auth header=: ${authHeader}`);
+    logger('INTROSPECT', `Token=: ${token}`);
+    logger('INTROSPECT', `Auth header=: ${authHeader}`);
 
     const data = await response.json();
 
@@ -121,7 +121,7 @@ async function transparentReauth(dvSessionToken) {
         body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken: dvSessionToken } })
     });
     const sdkData = await sdkRes.json();
-    
+
     if (!sdkData.access_token) {
         logger('DV_REAUTH', 'Failed: Could not get SDK Token.', sdkData);
         return null;
@@ -136,7 +136,7 @@ async function transparentReauth(dvSessionToken) {
             'Authorization': `Bearer ${sdkData.access_token}`
         }
     });
-    
+
     const tokens = await startRes.json();
     if (startRes.ok) {
         logger('DV_REAUTH', 'Success: New session established via DaVinci.');
@@ -153,7 +153,7 @@ app.post('/dvtoken', async (req, res) => {
     // Note: We use req.body.policyId if passed, otherwise fallback to our env variable
     const targetPolicy = req.body.policyId || POLICY_ID;
     logger('WIDGET_INIT', `Requesting SDK Token for Policy: ${targetPolicy}`);
-    
+
     try {
         const companyId = process.env.DV_COMPANY_ID;
         const apiKey = process.env.DV_API_KEY;
@@ -202,7 +202,7 @@ app.post('/auth/login', async (req, res) => {
             body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken } })
         });
         const sdkData = await sdkRes.json();
-        
+
         logger('LOGIN_HANDOFF', 'Step 2: Calling Policy /start to get OIDC tokens...');
         const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
             method: 'POST',
@@ -214,7 +214,7 @@ app.post('/auth/login', async (req, res) => {
 
         const tokens = await startRes.json();
         logger('LOGIN_HANDOFF', 'Step 3: Tokens received. Storing in Session.');
-
+        logger('LOGIN', `tokens=: ${tokens}`);
         req.session.access_token = tokens.access_token;
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
@@ -254,7 +254,7 @@ app.get('/auth/status', async (req, res) => {
             if (newData && newData.access_token) {
                 req.session.access_token = newData.access_token;
                 if (newData.refresh_token) req.session.refresh_token = newData.refresh_token;
-                
+
                 return req.session.save(() => {
                     logger('STATUS_CHECK', 'Waterfall Success: Session recovered via Refresh Token.');
                     res.json({ valid: true, method: "refresh_token" });
