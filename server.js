@@ -32,8 +32,8 @@ app.use(session({
     cookie: {
         httpOnly: true,
         secure: true,
-        sameSite: 'strict',
-        maxAge: 0
+        sameSite: 'lax',
+        maxAge: 34560000
     }
 }));
 
