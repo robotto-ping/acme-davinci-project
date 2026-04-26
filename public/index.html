@@ -115,10 +115,7 @@
         function showAuthenticatedState(user) {
             UI.auth.classList.remove('hidden');
             UI.claims.innerText = JSON.stringify(user, null, 2);
-            // We'll also do your requested alert!
-            setTimeout(() => {
-                alert(`Authenticated!\nWelcome, ${user.name || user.sub}`);
-            }, 100);
+            
         }
 
         /**
@@ -154,7 +151,6 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ sessionToken: res.additionalProperties.sessionToken })
                         });
-                        alert(JSON.stringify(loginRes));
                         if (loginRes.ok) window.location.reload();
                     },
                     errorCallback: (err) => {
