@@ -235,6 +235,9 @@ app.post('/auth/login', async (req, res) => {
         req.session.id_token = tokens.id_token;
         req.session.dv_session_token = tokens.sessionToken;
 
+        logger('AFTER LOGIN', 'Token Object from DaVinci');
+        logger('AFTER LOGIN', JSON.stringify(tokens));
+
         req.session.save((err) => {
             logger('LOGIN_HANDOFF', 'Session persisted. Login Complete.');
             res.json({ result: 'ok' });
