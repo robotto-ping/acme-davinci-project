@@ -165,7 +165,16 @@ app.post('/dvtoken', async (req, res) => {
 
         const data = await response.json();
         logger('WIDGET_INIT', 'DaVinci SDK Token Response received.');
-        res.json(data);
+        if (!data.success) {
+            return res.status(500).json({ error: data.message || "DaVinci Error" });
+        }
+
+        // Send the token and config back to the frontend
+        res.json({
+            token: data.access_token,
+            companyId: companyId,
+            apiRoot: API_ROOT
+        });
     } catch (error) {
         logger('WIDGET_INIT', 'CRITICAL ERROR', error);
         res.status(500).json({ error: "Internal Server Error" });
