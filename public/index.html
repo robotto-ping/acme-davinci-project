@@ -147,16 +147,15 @@
                     },
                     useModal: false,
                     successCallback: async (res) => {
-                        console.log(JSON.stringify(res));
                         console.log("Widget finished, handing off to BFF...");
                         
                         const loginRes = await fetch('/auth/login', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sessionToken: res.sessionToken })
+                            body: JSON.stringify({ sessionToken: res.additionalProperties.sessionToken })
                         });
                         alert(JSON.stringify(loginRes));
-                        //if (loginRes.ok) window.location.reload();
+                        if (loginRes.ok) window.location.reload();
                     },
                     errorCallback: (err) => {
                         console.error("Widget Error:", err);
