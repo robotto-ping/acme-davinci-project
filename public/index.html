@@ -153,8 +153,8 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ sessionToken: res.sessionToken })
                         });
-
-                        if (loginRes.ok) window.location.reload();
+                        alert(JSON.stringify(loginRes));
+                        //if (loginRes.ok) window.location.reload();
                     },
                     errorCallback: (err) => {
                         console.error("Widget Error:", err);
