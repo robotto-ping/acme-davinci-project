@@ -53,6 +53,22 @@ const logger = (step, message, data = null) => {
 
 // --- 4. HELPER METHODS ---
 
+/**
+ * HELPER: Decodes the payload of a JWT ID Token
+ */
+function decodeIdToken(token) {
+    try {
+        if (!token) return null;
+        const base64Url = token.split('.')[1]; // Get the payload part
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = Buffer.from(base64, 'base64').toString();
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        logger('DECODE_ERROR', 'Failed to parse ID Token claims', e);
+        return null;
+    }
+}
+
 async function introspectToken(token) {
     logger('INTROSPECT', 'Calling P1 Introspection endpoint...');
     const introspectURI = `${API_ROOT}/${process.env.DV_COMPANY_ID}/as/introspect`;
@@ -235,11 +251,21 @@ app.get('/auth/status', async (req, res) => {
     try {
         let { access_token, refresh_token, dv_session_token } = req.session;
 
+
+        const sendSuccess = (method, currentIdToken) => {
+            const claims = decodeIdToken(currentIdToken);
+            return res.json({ 
+                valid: true, 
+                method: method,
+                user: claims // This contains sub, name, email, etc.
+            });
+        };
+
         if (access_token) {
             const intro = await introspectToken(access_token);
             if (intro.active) {
                 logger('STATUS_CHECK', 'Waterfall Success: Access Token is valid.');
-                return res.json({ valid: true, method: "access_token" });
+                return sendSuccess("access_token", id_token);
             }
         }
 
@@ -251,7 +277,7 @@ app.get('/auth/status', async (req, res) => {
 
                 return req.session.save(() => {
                     logger('STATUS_CHECK', 'Waterfall Success: Session recovered via Refresh Token.');
-                    res.json({ valid: true, method: "refresh_token" });
+                    sendSuccess("refresh_token", req.session.id_token);
                 });
             }
         }
@@ -266,7 +292,7 @@ app.get('/auth/status', async (req, res) => {
 
                 return req.session.save(() => {
                     logger('STATUS_CHECK', 'Waterfall Success: Session recovered via DaVinci Re-auth.');
-                    res.json({ valid: true, method: "dv_reauth" });
+                    sendSuccess("dv_reauth", req.session.id_token);
                 });
             }
         }
