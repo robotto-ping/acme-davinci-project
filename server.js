@@ -214,7 +214,7 @@ app.post('/auth/login', async (req, res) => {
 
         const tokens = await startRes.json();
         logger('LOGIN_HANDOFF', 'Step 3: Tokens received. Storing in Session.');
-        logger('LOGIN', `tokens=: ${JSON.stringify(tokens)}`);
+      //  logger('LOGIN', `tokens=: ${JSON.stringify(tokens)}`);
         req.session.access_token = tokens.access_token;
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
@@ -223,7 +223,7 @@ app.post('/auth/login', async (req, res) => {
         logger('LOGIN', `access_token=: ${tokens.access_token}`);
         logger('LOGIN', `refresh_token=: ${tokens.refresh_token}`);
         logger('LOGIN', `id_token=: ${tokens.id_token}`);
-        logger('LOGIN', `dv_session_token=: ${tokens.dv_session_token}`);
+        logger('LOGIN', `dv_session_token=: ${tokens.sessionToken}`);
 
         req.session.save((err) => {
             logger('LOGIN_HANDOFF', 'Session persisted. Login Complete.');
