@@ -235,7 +235,7 @@ app.post('/auth/login', async (req, res) => {
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
         req.session.dv_session_token = tokens.sessionToken;
-
+logger('LOGIN_HANDOFF', JSON.stringify(tokens));
 
         req.session.save((err) => {
             logger('LOGIN_HANDOFF', 'Session persisted. Login Complete.');
