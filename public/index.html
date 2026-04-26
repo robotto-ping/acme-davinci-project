@@ -147,8 +147,9 @@
                     },
                     useModal: false,
                     successCallback: async (res) => {
+                        console.log(JSON.stringify(res));
                         console.log("Widget finished, handing off to BFF...");
-                        alert(JSON.stringify(res));
+                        
                         const loginRes = await fetch('/auth/login', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
