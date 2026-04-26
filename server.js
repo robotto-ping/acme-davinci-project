@@ -208,6 +208,7 @@ app.post('/auth/login', async (req, res) => {
     logger('LOGIN_HANDOFF', 'Widget completed. Starting server-side token exchange.');
     try {
         const { sessionToken } = req.body;
+        logger('LOGIN_HANDOFF', 'Session Token ' + sessionToken);
         const companyId = process.env.DV_COMPANY_ID;
         const apiKey = process.env.DV_API_KEY;
 
