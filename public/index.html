@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ACME | Secure Auth Console</title>
     
-    
     <script src="https://assets.pingone.eu/davinci/latest/davinci.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -46,4 +45,116 @@
                 <p class="text-emerald-400 text-sm font-medium">✓ Secure Session Active</p>
             </div>
             <p class="text-zinc-400 text-xs mb-4 uppercase tracking-widest">User Profile Data</p>
-            <div id="claims-display" class="bg-black/40 p-4 rounded-md text-[10px] font-mono text-emerald-300 overflow-
+            <div id="claims-display" class="bg-black/40 p-4 rounded-md text-[10px] font-mono text-emerald-300 overflow-auto max-h-48 mb-6">
+                </div>
+            <button onclick="logout()" class="text-xs text-zinc-500 hover:text-zinc-300 underline">Sign Out</button>
+        </div>
+
+        <div id="widget-container" class="dvWidget"></div>
+    </div>
+
+    <script>
+        // Use the fallback if you ever change it in the backend
+        const POLICY_ID = "cb71ac46ae7129de917e631204285f95"; 
+
+        const UI = {
+            loading: document.getElementById('loading-state'),
+            guest: document.getElementById('guest-state'),
+            auth: document.getElementById('auth-state'),
+            claims: document.getElementById('claims-display'),
+            widget: document.getElementById('widget-container')
+        };
+
+        /**
+         * ON PAGE LOAD: Trigger the BFF Waterfall
+         */
+        window.onload = async () => {
+            try {
+                const response = await fetch('/auth/status');
+                const data = await response.json();
+
+                UI.loading.classList.add('hidden');
+
+                if (data.valid) {
+                    console.log(`BFF Session Validated via: ${data.method}`);
+                    showAuthenticatedState(data.user);
+                } else {
+                    UI.guest.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("BFF Check Failed:", err);
+                UI.loading.innerHTML = '<p class="text-red-500 text-xs font-mono">BACKEND OFFLINE</p>';
+            }
+        };
+
+        /**
+         * SUCCESS HANDLER: Update UI with Claims
+         */
+        function showAuthenticatedState(user) {
+            UI.auth.classList.remove('hidden');
+            UI.claims.innerText = JSON.stringify(user, null, 2);
+            // We'll also do your requested alert!
+            setTimeout(() => {
+                alert(`Authenticated!\nWelcome, ${user.name || user.sub}`);
+            }, 100);
+        }
+
+        /**
+         * LOGIN CLICK: Start DaVinci Flow
+         */
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            UI.guest.classList.add('hidden');
+            
+            try {
+                // A. Get Token from BFF
+                const tokenRes = await fetch('/dvtoken', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ policyId: POLICY_ID })
+                });
+                const { token, companyId, apiRoot } = await tokenRes.json();
+
+                // B. Render Widget
+                const props = {
+                    config: {
+                        method: 'runFlow',
+                        apiRoot: apiRoot,
+                        accessToken: token,
+                        companyId: companyId,
+                        policyId: POLICY_ID
+                    },
+                    useModal: false,
+                    successCallback: async (res) => {
+                        console.log("Widget finished, handing off to BFF...");
+                        const loginRes = await fetch('/auth/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sessionToken: res.sessionToken })
+                        });
+                        
+                        if (loginRes.ok) window.location.reload();
+                    },
+                    errorCallback: (err) => {
+                        console.error("Widget Error:", err);
+                        UI.guest.classList.remove('hidden');
+                    }
+                };
+
+                davinci.skRenderScreen(UI.widget, props);
+
+            } catch (err) {
+                console.error("Auth Initialization Failed:", err);
+                UI.guest.classList.remove('hidden');
+            }
+        });
+
+        /**
+         * LOGOUT
+         */
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>
