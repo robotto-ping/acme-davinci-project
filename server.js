@@ -251,7 +251,7 @@ app.post('/auth/login', async (req, res) => {
 app.get('/auth/status', async (req, res) => {
     logger('STATUS_CHECK', 'Waterfall validation started.');
     try {
-        let { access_token, refresh_token, dv_session_token } = req.session;
+        let { access_token, refresh_token, dv_session_token, id_token } = req.session;
 
 
         const sendSuccess = (method, currentIdToken) => {
