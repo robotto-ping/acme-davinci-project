@@ -216,7 +216,7 @@ app.post('/auth/login', async (req, res) => {
         const sdkRes = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-SK-API-KEY': apiKey },
-            body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken } })
+            body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken, "ip": "34.56.55.55" } })
         });
         const sdkData = await sdkRes.json();
 
