@@ -56,6 +56,7 @@ const logger = (step, message, data = null) => {
 async function introspectToken(token) {
     logger('INTROSPECT', 'Calling P1 Introspection endpoint...');
     const introspectURI = `${API_ROOT}/${process.env.DV_COMPANY_ID}/as/introspect`;
+
     const authHeader = Buffer.from(`${process.env.CLIENT_ID}:${process.env.CLIENT_SECRET}`).toString('base64');
     
     const params = new URLSearchParams({ token: token });
@@ -67,7 +68,13 @@ async function introspectToken(token) {
         },
         body: params.toString()
     });
+
+logger('INTROSPECT', `Token=: ${token}`);
+logger('INTROSPECT', `Auth header=: ${authHeader}`);
+
     const data = await response.json();
+
+    logger('INTROSPECT', `data=: ${data}`);
     logger('INTROSPECT', `Result: ${data.active ? 'ACTIVE' : 'INACTIVE'}`);
     return data;
 }
