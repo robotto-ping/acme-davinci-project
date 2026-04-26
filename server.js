@@ -214,7 +214,7 @@ app.post('/auth/login', async (req, res) => {
 
         const tokens = await startRes.json();
         logger('LOGIN_HANDOFF', 'Step 3: Tokens received. Storing in Session.');
-        logger('LOGIN', `tokens=: ${tokens}`);
+        logger('LOGIN', `tokens=: ${JSON.stringify(tokens)}`);
         req.session.access_token = tokens.access_token;
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
