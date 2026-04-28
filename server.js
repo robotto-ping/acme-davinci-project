@@ -228,6 +228,7 @@ app.post('/auth/login', async (req, res) => {
         var ip = req.headers['x-forwarded-for'].split(",")[0];
 
         logger('LOGIN_HANDOFF', 'User Agent header::' + req.headers['User-Agent']);
+        logger('LOGIN_HANDOFF', 'All headers::' + req.headers);
 
 
         //const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
