@@ -227,7 +227,7 @@ app.post('/auth/login', async (req, res) => {
         //var ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress ;
         var ip = req.headers['x-forwarded-for'].split(",")[0];
 
-        logger('LOGIN_HANDOFF', 'User Agent header::' + req.headers['User-Agent']);
+        logger('LOGIN_HANDOFF', 'User Agent header::' + req.headers['user-agent']);
         logger('LOGIN_HANDOFF', 'All headers::' + JSON.stringify(req.headers));
 
 
@@ -239,7 +239,7 @@ app.post('/auth/login', async (req, res) => {
                 'Authorization': `Bearer ${sdkData.access_token}`,
                 'X-Ping-Itp-Secret': 'MyVeryVeryVerySecretValue',
                 'acme-backend-client-ip': ip,
-                'User-Agent': 'Betty Boop'
+                'User-Agent': req.headers['user-agent']
             }
         });
 
