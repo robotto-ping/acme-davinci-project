@@ -215,8 +215,12 @@ app.post('/auth/login', async (req, res) => {
         logger('LOGIN_HANDOFF', 'Step 1: Exchanging Widget sessionToken for SDK Token...');
         const sdkRes = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-SK-API-KEY': apiKey },
-            body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken, "ip": "34.56.55.55" } })
+            headers: { 'Content-Type': 'application/json', 
+                'X-SK-API-KEY': apiKey,
+                'X-Ping-Itp-Secret' : 'MyVeryVeryVerySecretValue',
+                'acme-backend-client-ip':'50.55.56.122'
+             },
+            body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken } })
         });
         const sdkData = await sdkRes.json();
 
