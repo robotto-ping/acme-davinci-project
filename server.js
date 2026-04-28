@@ -225,7 +225,7 @@ app.post('/auth/login', async (req, res) => {
 
         logger('LOGIN_HANDOFF', 'Step 2: Calling Policy /start to get OIDC tokens...');
         //var ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress ;
-        var ip = req.headers['x-forwarded-for'][0];
+        var ip = req.headers['x-forwarded-for'];
         //const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
         const startRes = await fetch(`https://acme-id.sevenoaksottos.com/davinci/policy/${POLICY_ID}/start`, {
             method: 'POST',
