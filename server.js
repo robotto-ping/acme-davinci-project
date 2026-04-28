@@ -224,6 +224,7 @@ app.post('/auth/login', async (req, res) => {
         const sdkData = await sdkRes.json();
 
         logger('LOGIN_HANDOFF', 'Step 2: Calling Policy /start to get OIDC tokens...');
+        var ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress 
         //const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
         const startRes = await fetch(`https://acme-id.sevenoaksottos.com/davinci/policy/${POLICY_ID}/start`, {
             method: 'POST',
@@ -231,7 +232,8 @@ app.post('/auth/login', async (req, res) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sdkData.access_token}`,
                 'X-Ping-Itp-Secret': 'MyVeryVeryVerySecretValue',
-                'acme-backend-client-ip': '188.39.235.130'
+                'acme-backend-client-ip': ip,
+                'User-Agent' : req.headers['User-Agent']
             }
         });
 
