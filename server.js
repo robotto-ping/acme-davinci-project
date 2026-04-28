@@ -215,21 +215,23 @@ app.post('/auth/login', async (req, res) => {
         logger('LOGIN_HANDOFF', 'Step 1: Exchanging Widget sessionToken for SDK Token...');
         const sdkRes = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 
-                'X-SK-API-KEY': apiKey,
-                'X-Ping-Itp-Secret' : 'MyVeryVeryVerySecretValue',
-                'acme-backend-client-ip':'50.55.56.122'
-             },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-SK-API-KEY': apiKey
+            },
             body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken } })
         });
         const sdkData = await sdkRes.json();
 
         logger('LOGIN_HANDOFF', 'Step 2: Calling Policy /start to get OIDC tokens...');
-        const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
+        //const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
+        const startRes = await fetch(`https://acme-id.sevenoaksottos.com/davinci/policy/${POLICY_ID}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sdkData.access_token}`
+                'Authorization': `Bearer ${sdkData.access_token}`,
+                'X-Ping-Itp-Secret': 'MyVeryVeryVerySecretValue',
+                'acme-backend-client-ip': '50.55.56.122'
             }
         });
 
@@ -239,7 +241,7 @@ app.post('/auth/login', async (req, res) => {
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
         req.session.dv_session_token = tokens.sessionToken;
-logger('LOGIN_HANDOFF', JSON.stringify(tokens));
+        logger('LOGIN_HANDOFF', JSON.stringify(tokens));
 
         req.session.save((err) => {
             logger('LOGIN_HANDOFF', 'Session persisted. Login Complete.');
@@ -260,8 +262,8 @@ app.get('/auth/status', async (req, res) => {
 
         const sendSuccess = (method, currentIdToken) => {
             const claims = decodeIdToken(currentIdToken);
-            return res.json({ 
-                valid: true, 
+            return res.json({
+                valid: true,
                 method: method,
                 user: claims // This contains sub, name, email, etc.
             });
