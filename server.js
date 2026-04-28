@@ -238,7 +238,7 @@ app.post('/auth/login', async (req, res) => {
                 'Authorization': `Bearer ${sdkData.access_token}`,
                 'X-Ping-Itp-Secret': 'MyVeryVeryVerySecretValue',
                 'acme-backend-client-ip': ip,
-                'User-Agent': req.headers['User-Agent']
+                'User-Agent': 'Betty Boop'
             }
         });
 
