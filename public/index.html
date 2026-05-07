@@ -74,7 +74,7 @@
     </div>
 
     <script>
-        // Use the fallback if you ever change it in the backend
+        // the Policy ID for the front-end (Widget) flow
         const POLICY_ID = "53e36f1eacf651f2a80d2428cb5861ec";
 
         const UI = {
@@ -85,29 +85,6 @@
             widget: document.getElementById('widget-container')
         };
 
-        /**
-         * ON PAGE LOAD: Trigger the BFF Waterfall
-         */
-        window.onload = async () => {
-            try {
-                const response = await fetch('/auth/status', {
-                    credentials: 'include'
-                });
-                const data = await response.json();
-
-                UI.loading.classList.add('hidden');
-
-                if (data.valid) {
-                    console.log(`BFF Session Validated via: ${data.method}`);
-                    showAuthenticatedState(data.user);
-                } else {
-                    UI.guest.classList.remove('hidden');
-                }
-            } catch (err) {
-                console.error("BFF Check Failed:", err);
-                UI.loading.innerHTML = '<p class="text-red-500 text-xs font-mono">BACKEND OFFLINE</p>';
-            }
-        };
 
         /**
          * SUCCESS HANDLER: Update UI with Claims
@@ -115,7 +92,6 @@
         function showAuthenticatedState(user) {
             UI.auth.classList.remove('hidden');
             UI.claims.innerText = JSON.stringify(user, null, 2);
-            
         }
 
         /**

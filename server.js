@@ -160,6 +160,11 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 
-
+app.post('/auth/logout', (req, res) => {
+    logger('LOGOUT', 'Destroying session.');
+    req.session.destroy();
+    res.clearCookie('acme_session');
+    res.json({ success: true });
+});
 
 app.listen(PORT, () => console.log(`Server backend live on port ${PORT}`));
