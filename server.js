@@ -6,21 +6,21 @@ require('dotenv').config();
 
 const app = express();
 
-// --- 1. GLOBAL CONFIGURATION ---
+
 app.enable('trust proxy');
 const PORT = process.env.PORT || 3000;
 const REGION = process.env.DV_REGION || 'eu';
 const API_ROOT = `https://auth.pingone.${REGION}`;
 const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
 
-// NEW: Centralized Policy ID from Environment
+// This POLICY_ID is the backend DaVinci flow used to obtain tokens 
 const POLICY_ID = process.env.DV_POLICY_ID;
 
 if (!POLICY_ID) {
     console.error("CRITICAL: DV_POLICY_ID is not defined in environment variables!");
 }
 
-// --- 2. MIDDLEWARE ---
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -33,7 +33,7 @@ app.use(session({
         httpOnly: true,
         secure: true,
         sameSite: 'lax',
-        maxAge: 34560000
+        maxAge: 34560000 
     }
 }));
 
@@ -44,14 +44,12 @@ app.use(cors({
 
 app.use(express.static('public'));
 
-// --- 3. LOGGING HELPER ---
 const logger = (step, message, data = null) => {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [${step}] ${message}`);
     if (data) console.log(`[${step}] DATA:`, JSON.stringify(data, null, 2));
 };
 
-// --- 4. HELPER METHODS ---
 
 /**
  * HELPER: Decodes the payload of a JWT ID Token
@@ -85,12 +83,8 @@ async function introspectToken(token) {
         body: params.toString()
     });
 
-    logger('INTROSPECT', `Token=: ${token}`);
-    logger('INTROSPECT', `Auth header=: ${authHeader}`);
-
     const data = await response.json();
 
-    logger('INTROSPECT', `data=: ${JSON.stringify(data)}`);
     logger('INTROSPECT', `Result: ${data.active ? 'ACTIVE' : 'INACTIVE'}`);
     return data;
 }
@@ -134,7 +128,13 @@ async function transparentReauth(dvSessionToken) {
     const sdkRes = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-SK-API-KEY': apiKey },
-        body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken: dvSessionToken } })
+        body: JSON.stringify(
+            { policyId: POLICY_ID, 
+                global: { 
+                    sessionToken: dvSessionToken 
+                } 
+            }
+        )
     });
     const sdkData = await sdkRes.json();
 
@@ -166,8 +166,8 @@ async function transparentReauth(dvSessionToken) {
 // --- 5. ROUTES ---
 
 app.post('/dvtoken', async (req, res) => {
-    // Note: We use req.body.policyId if passed, otherwise fallback to our env variable
-    const targetPolicy = req.body.policyId || POLICY_ID;
+
+    const targetPolicy = req.body.policyId; //Policy ID for the front-end (widget) flow
     logger('WIDGET_INIT', `Requesting SDK Token for Policy: ${targetPolicy}`);
 
     try {
@@ -175,14 +175,13 @@ app.post('/dvtoken', async (req, res) => {
         const apiKey = process.env.DV_API_KEY;
 
         let body = { policyId: targetPolicy };
-        if (req.cookies['DV-ST']) {
-            logger('WIDGET_INIT', 'Found existing DV-ST cookie, including in request.');
-            body.global = { sessionToken: req.cookies['DV-ST'] };
-        }
 
         const response = await fetch(`${ORCHESTRATE_BASE_URL}/company/${companyId}/sdktoken`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-SK-API-KEY': apiKey },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'X-SK-API-KEY': apiKey 
+            },
             body: JSON.stringify(body)
         });
 
@@ -208,7 +207,7 @@ app.post('/auth/login', async (req, res) => {
     logger('LOGIN_HANDOFF', 'Widget completed. Starting server-side token exchange.');
     try {
         const { sessionToken } = req.body;
-        logger('LOGIN_HANDOFF', 'Session Token ' + sessionToken);
+
         const companyId = process.env.DV_COMPANY_ID;
         const apiKey = process.env.DV_API_KEY;
 
@@ -219,26 +218,21 @@ app.post('/auth/login', async (req, res) => {
                 'Content-Type': 'application/json',
                 'X-SK-API-KEY': apiKey
             },
-            body: JSON.stringify({ policyId: POLICY_ID, global: { sessionToken } })
+            body: JSON.stringify({ 
+                    policyId: POLICY_ID,
+                     global: { sessionToken } 
+                    }
+                )
         });
         const sdkData = await sdkRes.json();
 
         logger('LOGIN_HANDOFF', 'Step 2: Calling Policy /start to get OIDC tokens...');
-        //var ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress ;
-        var ip = req.headers['x-forwarded-for'].split(",")[0];
 
-        logger('LOGIN_HANDOFF', 'User Agent header::' + req.headers['user-agent']);
-        logger('LOGIN_HANDOFF', 'All headers::' + JSON.stringify(req.headers));
-
-
-        //const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
-        const startRes = await fetch(`https://acme-id.sevenoaksottos.com/davinci/policy/${POLICY_ID}/start`, {
+        const startRes = await fetch(`${API_ROOT}/${companyId}/davinci/policy/${POLICY_ID}/start`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${sdkData.access_token}`,
-                'X-Ping-Itp-Secret': 'MyVeryVeryVerySecretValue',
-                'acme-backend-client-ip': ip,
                 'User-Agent': req.headers['user-agent']
             }
         });
@@ -267,13 +261,12 @@ app.get('/auth/status', async (req, res) => {
     try {
         let { access_token, refresh_token, dv_session_token, id_token } = req.session;
 
-
         const sendSuccess = (method, currentIdToken) => {
             const claims = decodeIdToken(currentIdToken);
             return res.json({
                 valid: true,
                 method: method,
-                user: claims // This contains sub, name, email, etc.
+                user: claims 
             });
         };
 
@@ -329,4 +322,4 @@ app.post('/auth/logout', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(PORT, () => console.log(`Acme BFF live on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server backend live on port ${PORT}`));
