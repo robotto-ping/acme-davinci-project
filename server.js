@@ -104,6 +104,7 @@ app.post('/dvtoken', async (req, res) => {
         res.json({
             token: data.access_token,
             companyId: companyId,
+            policyId: WIDGET_POLICY_ID,
             apiRoot: API_ROOT
         });
     } catch (error) {
