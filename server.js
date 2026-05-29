@@ -16,12 +16,14 @@ const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
 // This POLICY_ID is the backend DaVinci flow used to obtain tokens 
 const POLICY_ID = process.env.DV_POLICY_ID;
 //Policy ID for the front-end (widget) flow
-const WIDGET_POLICY_ID = "53e36f1eacf651f2a80d2428cb5861ec";
+const WIDGET_POLICY_ID = process.env.WIDGET_POLICY_ID;
 
 if (!POLICY_ID) {
     console.error("CRITICAL: DV_POLICY_ID is not defined in environment variables!");
 }
-
+if (!WIDGET_POLICY_ID) {
+    console.error("CRITICAL: WIDGET_POLICY_ID is not defined in environment variables!");
+}
 
 app.use(express.json());
 app.use(cookieParser());
