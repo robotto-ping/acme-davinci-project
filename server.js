@@ -246,6 +246,24 @@ const clearSessionCookieOptions = {
     path: '/'
 };
 
+const crypto = require('crypto');
+
+const AUTH_TRANSACTION_TTL_MS = Number(
+    process.env.AUTH_TRANSACTION_TTL_MS || 5 * 60 * 1000
+);
+
+function createAuthTransaction() {
+    const timestamp = Date.now();
+
+    return {
+        transactionID: crypto.randomUUID(),
+        nonce: crypto.randomBytes(32).toString('base64url'),
+        timestamp,
+        expiresAt: timestamp + AUTH_TRANSACTION_TTL_MS,
+        status: 'pending'
+    };
+}
+
 app.use((req, res, next) => {
     res.set({
         'Cache-Control': 'no-store',
@@ -291,7 +309,12 @@ const apiRateLimit = rateLimit({ windowMs: 60 * 1000, max: 30 });
 const authRateLimit = rateLimit({ windowMs: 60 * 1000, max: 10 });
 
 app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
-    logger('WIDGET_INIT', `Requesting SDK Token for widget policy: ${WIDGET_POLICY_ID}`);
+    const authTransaction = createAuthTransaction();
+
+    logger('WIDGET_INIT', 'Starting DaVinci widget transaction.', {
+        transactionID: authTransaction.transactionID,
+        timestamp: authTransaction.timestamp
+    });
 
     try {
         const response = await fetchJson(`${ORCHESTRATE_BASE_URL}/company/${COMPANY_ID}/sdktoken`, {
@@ -300,14 +323,26 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
                 'Content-Type': 'application/json',
                 'X-SK-API-KEY': API_KEY
             },
-            body: JSON.stringify({ policyId: WIDGET_POLICY_ID })
+            body: JSON.stringify({
+                policyId: WIDGET_POLICY_ID,
+                parameters: {
+                    transactionID: authTransaction.transactionID,
+                    nonce: authTransaction.nonce,
+                    timestamp: authTransaction.timestamp
+                }
+            })
         });
 
         const data = await parseJsonResponse(response, 'WIDGET_INIT');
         if (!data.success || !data.access_token) {
-            logger('WIDGET_INIT', 'DaVinci did not return a usable SDK token.', { success: data.success });
+            logger('WIDGET_INIT', 'DaVinci did not return a usable SDK token.', {
+                success: data.success
+            });
             return res.status(502).json({ error: 'Unable to initialize DaVinci widget' });
         }
+
+        req.session.authTransaction = authTransaction;
+        await saveSession(req);
 
         return res.json({
             token: data.access_token,
@@ -316,7 +351,9 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
             apiRoot: API_ROOT
         });
     } catch (error) {
-        logger('WIDGET_INIT', 'Failed to initialize DaVinci widget token.', { message: error.message });
+        logger('WIDGET_INIT', 'Failed to initialize DaVinci widget token.', {
+            message: error.message
+        });
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
