@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -15,6 +16,8 @@ const API_ROOT = `https://auth.pingone.${REGION}`;
 const ORCHESTRATE_BASE_URL = `https://orchestrate-api.pingone.${REGION}/v1`;
 const SESSION_COOKIE_NAME = '__Host-acme_session';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 30 * 60 * 1000);
+const AUTH_FLOW_START_TTL_MS = Number(process.env.AUTH_FLOW_START_TTL_MS || 15 * 1000);
+const AUTH_TRANSACTION_TTL_MS = Number(process.env.AUTH_TRANSACTION_TTL_MS || 5 * 60 * 1000);
 
 const REQUIRED_ENV = [
     'DV_COMPANY_ID',
@@ -22,7 +25,9 @@ const REQUIRED_ENV = [
     'DV_POLICY_ID',
     'WIDGET_POLICY_ID',
     'SESSION_SECRET',
-    'PUBLIC_URL'
+    'PUBLIC_URL',
+    'DAVINCI_CALLBACK_SECRET',
+    'OIDC_AUDIENCE'
 ];
 
 const missingEnv = REQUIRED_ENV.filter((key) => !process.env[key]);
@@ -38,10 +43,25 @@ if (!Number.isFinite(SESSION_TTL_MS) || SESSION_TTL_MS < 60 * 1000) {
     throw new Error('SESSION_TTL_MS must be at least 60000 milliseconds.');
 }
 
+if (!Number.isFinite(AUTH_FLOW_START_TTL_MS) || AUTH_FLOW_START_TTL_MS < 1000) {
+    throw new Error('AUTH_FLOW_START_TTL_MS must be at least 1000 milliseconds.');
+}
+
+if (!Number.isFinite(AUTH_TRANSACTION_TTL_MS) || AUTH_TRANSACTION_TTL_MS <= AUTH_FLOW_START_TTL_MS) {
+    throw new Error('AUTH_TRANSACTION_TTL_MS must be greater than AUTH_FLOW_START_TTL_MS.');
+}
+
 const COMPANY_ID = process.env.DV_COMPANY_ID;
 const API_KEY = process.env.DV_API_KEY;
 const POLICY_ID = process.env.DV_POLICY_ID;
 const WIDGET_POLICY_ID = process.env.WIDGET_POLICY_ID;
+const DAVINCI_CALLBACK_SECRET = process.env.DAVINCI_CALLBACK_SECRET;
+const OIDC_ISSUER = process.env.OIDC_ISSUER || `${API_ROOT}/${COMPANY_ID}/as`;
+const OIDC_AUDIENCE = process.env.OIDC_AUDIENCE;
+const OIDC_JWKS_URI = process.env.OIDC_JWKS_URI || `${OIDC_ISSUER}/jwks`;
+
+const authTransactions = new Map();
+let remoteJwks;
 
 const fetchJson = global.fetch
     ? global.fetch.bind(global)
@@ -83,10 +103,10 @@ const SENSITIVE_KEYS = new Set([
     'access_token',
     'refresh_token',
     'id_token',
-    'sessionToken',
+    'sessiontoken',
     'dv_session_token',
     'token',
-    'apiKey',
+    'apikey',
     'authorization',
     'x-sk-api-key'
 ]);
@@ -176,6 +196,44 @@ function rateLimit({ windowMs, max }) {
     };
 }
 
+function cleanupExpiredAuthTransactions(now = Date.now()) {
+    for (const [transactionID, transaction] of authTransactions.entries()) {
+        if (transaction.completeBy <= now) {
+            authTransactions.delete(transactionID);
+        }
+    }
+}
+
+function createAuthTransaction() {
+    const issuedAt = Date.now();
+
+    return {
+        transactionID: crypto.randomUUID(),
+        nonce: crypto.randomBytes(32).toString('base64url'),
+        issuedAt,
+        startBy: issuedAt + AUTH_FLOW_START_TTL_MS,
+        completeBy: issuedAt + AUTH_TRANSACTION_TTL_MS,
+        status: 'pending'
+    };
+}
+
+function safeEqual(a, b) {
+    const left = Buffer.from(a || '', 'utf8');
+    const right = Buffer.from(b || '', 'utf8');
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function requireDavinciCallbackSecret(req, res, next) {
+    const provided = req.get('X-DaVinci-Callback-Secret');
+
+    if (!safeEqual(provided, DAVINCI_CALLBACK_SECRET)) {
+        logger('SECURITY', 'Rejected unauthenticated DaVinci callback.', { ip: req.ip });
+        return res.status(401).json({ error: 'Unauthorized callback' });
+    }
+
+    return next();
+}
+
 function decodeIdToken(token) {
     try {
         if (!token) return null;
@@ -187,6 +245,21 @@ function decodeIdToken(token) {
         logger('DECODE_ERROR', 'Failed to parse ID Token claims.');
         return null;
     }
+}
+
+async function verifyIdToken(idToken) {
+    const { createRemoteJWKSet, jwtVerify } = await import('jose');
+
+    if (!remoteJwks) {
+        remoteJwks = createRemoteJWKSet(new URL(OIDC_JWKS_URI));
+    }
+
+    const { payload } = await jwtVerify(idToken, remoteJwks, {
+        issuer: OIDC_ISSUER,
+        audience: OIDC_AUDIENCE
+    });
+
+    return payload;
 }
 
 async function parseJsonResponse(response, step) {
@@ -210,6 +283,20 @@ async function parseJsonResponse(response, step) {
     }
 
     return data;
+}
+
+function readDeliveredTokens(body) {
+    return {
+        access_token: body.access_token || body.tokens?.access_token,
+        refresh_token: body.refresh_token || body.tokens?.refresh_token,
+        id_token: body.id_token || body.tokens?.id_token,
+        token_type: body.token_type || body.tokens?.token_type,
+        expires_in: body.expires_in || body.tokens?.expires_in
+    };
+}
+
+function getTransactionIDFromClaims(claims) {
+    return claims.bff_transaction_id || claims.transactionID || claims.transaction_id;
 }
 
 function regenerateSession(req) {
@@ -246,29 +333,6 @@ const clearSessionCookieOptions = {
     path: '/'
 };
 
-const crypto = require('crypto');
-
-const AUTH_FLOW_START_TTL_MS = Number(
-    process.env.AUTH_FLOW_START_TTL_MS || 15 * 1000
-);
-
-const AUTH_TRANSACTION_TTL_MS = Number(
-    process.env.AUTH_TRANSACTION_TTL_MS || 5 * 60 * 1000
-);
-
-function createAuthTransaction() {
-    const issuedAt = Date.now();
-
-    return {
-        transactionID: crypto.randomUUID(),
-        nonce: crypto.randomBytes(32).toString('base64url'),
-        issuedAt,
-        startBy: issuedAt + AUTH_FLOW_START_TTL_MS,
-        completeBy: issuedAt + AUTH_TRANSACTION_TTL_MS,
-        status: 'pending'
-    };
-}
-
 app.use((req, res, next) => {
     res.set({
         'Cache-Control': 'no-store',
@@ -279,6 +343,87 @@ app.use((req, res, next) => {
     });
     next();
 });
+
+const apiRateLimit = rateLimit({ windowMs: 60 * 1000, max: 30 });
+const authRateLimit = rateLimit({ windowMs: 60 * 1000, max: 10 });
+const callbackRateLimit = rateLimit({ windowMs: 60 * 1000, max: 60 });
+
+app.post(
+    '/auth/davinci/complete',
+    callbackRateLimit,
+    express.json({ limit: '20kb' }),
+    requireDavinciCallbackSecret,
+    async (req, res) => {
+        try {
+            const { transactionID, nonce, completedAt, interactionId } = req.body || {};
+
+            if (typeof transactionID !== 'string' || !transactionID) {
+                return res.status(400).json({ error: 'Missing transactionID' });
+            }
+
+            if (typeof nonce !== 'string' || !nonce) {
+                return res.status(400).json({ error: 'Missing nonce' });
+            }
+
+            const transaction = authTransactions.get(transactionID);
+            if (!transaction || transaction.status !== 'pending') {
+                return res.status(409).json({ error: 'Unknown or invalid transaction' });
+            }
+
+            if (Date.now() > transaction.completeBy) {
+                authTransactions.delete(transactionID);
+                return res.status(410).json({ error: 'Transaction expired' });
+            }
+
+            if (!safeEqual(nonce, transaction.nonce)) {
+                logger('SECURITY', 'Rejected DaVinci callback with body nonce mismatch.', { transactionID });
+                return res.status(403).json({ error: 'Invalid transaction binding' });
+            }
+
+            const tokens = readDeliveredTokens(req.body);
+            if (!tokens.id_token) {
+                return res.status(400).json({ error: 'Missing id_token' });
+            }
+
+            const claims = await verifyIdToken(tokens.id_token);
+            const tokenTransactionID = getTransactionIDFromClaims(claims);
+
+            if (!safeEqual(tokenTransactionID, transactionID)) {
+                logger('SECURITY', 'Rejected DaVinci callback with ID token transaction mismatch.', {
+                    transactionID
+                });
+                return res.status(403).json({ error: 'Invalid token transaction binding' });
+            }
+
+            if (!safeEqual(claims.nonce, transaction.nonce)) {
+                logger('SECURITY', 'Rejected DaVinci callback with ID token nonce mismatch.', {
+                    transactionID
+                });
+                return res.status(403).json({ error: 'Invalid token nonce binding' });
+            }
+
+            transaction.status = 'tokens_delivered';
+            transaction.completedAt = Number.isFinite(Number(completedAt)) ? Number(completedAt) : Date.now();
+            transaction.interactionId = interactionId || null;
+            transaction.subject = claims.sub;
+            transaction.idTokenClaims = claims;
+            transaction.tokens = tokens;
+
+            logger('DAVINCI_CALLBACK', 'Accepted token delivery from DaVinci.', {
+                transactionID,
+                subject: claims.sub,
+                interactionId: transaction.interactionId
+            });
+
+            return res.json({ received: true });
+        } catch (error) {
+            logger('DAVINCI_CALLBACK', 'Failed to process DaVinci callback.', {
+                message: error.message
+            });
+            return res.status(400).json({ error: 'Invalid token delivery' });
+        }
+    }
+);
 
 app.use(cors({
     origin(origin, callback) {
@@ -297,117 +442,6 @@ app.use(cors({
     optionsSuccessStatus: 204
 }));
 
-
-const crypto = require('crypto');
-
-const authTransactions = new Map();
-const DAVINCI_CALLBACK_SECRET = process.env.DAVINCI_CALLBACK_SECRET;
-const OIDC_ISSUER = process.env.OIDC_ISSUER || `${API_ROOT}/${COMPANY_ID}/as`;
-const OIDC_AUDIENCE = process.env.OIDC_AUDIENCE;
-const OIDC_JWKS_URI = process.env.OIDC_JWKS_URI || `${OIDC_ISSUER}/jwks`;
-
-let remoteJwks;
-
-function safeEqual(a, b) {
-    const left = Buffer.from(a || '', 'utf8');
-    const right = Buffer.from(b || '', 'utf8');
-    return left.length === right.length && crypto.timingSafeEqual(left, right);
-}
-
-function requireDavinciCallbackSecret(req, res, next) {
-    const provided = req.get('X-DaVinci-Callback-Secret');
-
-    if (!DAVINCI_CALLBACK_SECRET || !safeEqual(provided, DAVINCI_CALLBACK_SECRET)) {
-        logger('SECURITY', 'Rejected unauthenticated DaVinci callback.', { ip: req.ip });
-        return res.status(401).json({ error: 'Unauthorized callback' });
-    }
-
-    return next();
-}
-
-async function verifyIdToken(idToken) {
-    const { createRemoteJWKSet, jwtVerify } = await import('jose');
-
-    if (!remoteJwks) {
-        remoteJwks = createRemoteJWKSet(new URL(OIDC_JWKS_URI));
-    }
-
-    const { payload } = await jwtVerify(idToken, remoteJwks, {
-        issuer: OIDC_ISSUER,
-        audience: OIDC_AUDIENCE
-    });
-
-    return payload;
-}
-
-function readDeliveredTokens(body) {
-    return {
-        access_token: body.access_token || body.tokens?.access_token,
-        refresh_token: body.refresh_token || body.tokens?.refresh_token,
-        id_token: body.id_token || body.tokens?.id_token,
-        token_type: body.token_type || body.tokens?.token_type,
-        expires_in: body.expires_in || body.tokens?.expires_in
-    };
-}
-
-app.post(
-    '/auth/davinci/complete',
-    express.json({ limit: '20kb' }),
-    requireDavinciCallbackSecret,
-    async (req, res) => {
-        try {
-            const tokens = readDeliveredTokens(req.body);
-
-            if (!tokens.id_token) {
-                return res.status(400).json({ error: 'Missing id_token' });
-            }
-
-            const claims = await verifyIdToken(tokens.id_token);
-            const transactionID =
-                claims.be_transaction_id || claims.transactionID || claims.transaction_id;
-
-            if (!transactionID || !claims.nonce) {
-                return res.status(400).json({ error: 'Missing transaction binding claims' });
-            }
-
-            const transaction = authTransactions.get(transactionID);
-
-            if (!transaction || transaction.status !== 'pending') {
-                return res.status(409).json({ error: 'Unknown or invalid transaction' });
-            }
-
-            if (Date.now() > transaction.completeBy) {
-                transaction.status = 'expired';
-                return res.status(410).json({ error: 'Transaction expired' });
-            }
-
-            if (claims.nonce !== transaction.nonce) {
-                logger('SECURITY', 'Rejected DaVinci callback with nonce mismatch.', { transactionID });
-                return res.status(403).json({ error: 'Invalid transaction binding' });
-            }
-
-            transaction.status = 'tokens_delivered';
-            transaction.completedAt = Date.now();
-            transaction.subject = claims.sub;
-            transaction.idTokenClaims = claims;
-            transaction.tokens = tokens;
-            transaction.interactionId = req.body.interactionId || null;
-
-            logger('DAVINCI_CALLBACK', 'Accepted token delivery from DaVinci.', {
-                transactionID,
-                subject: claims.sub
-            });
-
-            return res.json({ received: true });
-        } catch (error) {
-            logger('DAVINCI_CALLBACK', 'Failed to process DaVinci callback.', {
-                message: error.message
-            });
-            return res.status(400).json({ error: 'Invalid token delivery' });
-        }
-    }
-);
-
 app.use(requireTrustedOrigin);
 app.use(express.json({ limit: '10kb' }));
 app.use(cookieParser());
@@ -421,15 +455,15 @@ app.use(session({
 }));
 app.use(express.static('public'));
 
-const apiRateLimit = rateLimit({ windowMs: 60 * 1000, max: 30 });
-const authRateLimit = rateLimit({ windowMs: 60 * 1000, max: 10 });
-
 app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
+    cleanupExpiredAuthTransactions();
     const authTransaction = createAuthTransaction();
 
     logger('WIDGET_INIT', 'Starting DaVinci widget transaction.', {
         transactionID: authTransaction.transactionID,
-        timestamp: authTransaction.timestamp
+        issuedAt: authTransaction.issuedAt,
+        startBy: authTransaction.startBy,
+        completeBy: authTransaction.completeBy
     });
 
     try {
@@ -444,24 +478,33 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
                 parameters: {
                     transactionID: authTransaction.transactionID,
                     nonce: authTransaction.nonce,
-                    expiresAt: authTransaction.startBy
+                    issuedAt: authTransaction.issuedAt,
+                    startBy: authTransaction.startBy,
+                    completeBy: authTransaction.completeBy
                 }
             })
         });
 
         const data = await parseJsonResponse(response, 'WIDGET_INIT');
         if (!data.success || !data.access_token) {
-            logger('WIDGET_INIT', 'DaVinci did not return a usable SDK token.', {
-                success: data.success
-            });
+            logger('WIDGET_INIT', 'DaVinci did not return a usable SDK token.', { success: data.success });
             return res.status(502).json({ error: 'Unable to initialize DaVinci widget' });
         }
 
-        req.session.authTransaction = authTransaction;
+        req.session.authTransaction = {
+            transactionID: authTransaction.transactionID,
+            nonce: authTransaction.nonce,
+            issuedAt: authTransaction.issuedAt,
+            startBy: authTransaction.startBy,
+            completeBy: authTransaction.completeBy,
+            status: authTransaction.status
+        };
+
         authTransactions.set(authTransaction.transactionID, {
             ...authTransaction,
             sessionID: req.sessionID
         });
+
         await saveSession(req);
 
         return res.json({
@@ -471,9 +514,7 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
             apiRoot: API_ROOT
         });
     } catch (error) {
-        logger('WIDGET_INIT', 'Failed to initialize DaVinci widget token.', {
-            message: error.message
-        });
+        logger('WIDGET_INIT', 'Failed to initialize DaVinci widget token.', { message: error.message });
         return res.status(500).json({ error: 'Internal Server Error' });
     }
 });
