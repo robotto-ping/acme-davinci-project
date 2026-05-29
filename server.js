@@ -248,18 +248,23 @@ const clearSessionCookieOptions = {
 
 const crypto = require('crypto');
 
+const AUTH_FLOW_START_TTL_MS = Number(
+    process.env.AUTH_FLOW_START_TTL_MS || 15 * 1000
+);
+
 const AUTH_TRANSACTION_TTL_MS = Number(
     process.env.AUTH_TRANSACTION_TTL_MS || 5 * 60 * 1000
 );
 
 function createAuthTransaction() {
-    const timestamp = Date.now();
+    const issuedAt = Date.now();
 
     return {
         transactionID: crypto.randomUUID(),
         nonce: crypto.randomBytes(32).toString('base64url'),
-        timestamp,
-        expiresAt: timestamp + AUTH_TRANSACTION_TTL_MS,
+        issuedAt,
+        startBy: issuedAt + AUTH_FLOW_START_TTL_MS,
+        completeBy: issuedAt + AUTH_TRANSACTION_TTL_MS,
         status: 'pending'
     };
 }
@@ -328,7 +333,7 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
                 parameters: {
                     transactionID: authTransaction.transactionID,
                     nonce: authTransaction.nonce,
-                    timestamp: authTransaction.timestamp
+                    expiresAt: authTransaction.startBy
                 }
             })
         });
