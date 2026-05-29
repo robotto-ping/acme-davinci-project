@@ -22,7 +22,6 @@ const AUTH_TRANSACTION_TTL_MS = Number(process.env.AUTH_TRANSACTION_TTL_MS || 5 
 const REQUIRED_ENV = [
     'DV_COMPANY_ID',
     'DV_API_KEY',
-    'DV_POLICY_ID',
     'WIDGET_POLICY_ID',
     'SESSION_SECRET',
     'PUBLIC_URL',
@@ -53,7 +52,6 @@ if (!Number.isFinite(AUTH_TRANSACTION_TTL_MS) || AUTH_TRANSACTION_TTL_MS <= AUTH
 
 const COMPANY_ID = process.env.DV_COMPANY_ID;
 const API_KEY = process.env.DV_API_KEY;
-const POLICY_ID = process.env.DV_POLICY_ID;
 const WIDGET_POLICY_ID = process.env.WIDGET_POLICY_ID;
 const DAVINCI_CALLBACK_SECRET = process.env.DAVINCI_CALLBACK_SECRET;
 const OIDC_ISSUER = process.env.OIDC_ISSUER || `${API_ROOT}/${COMPANY_ID}/as`;
@@ -234,19 +232,6 @@ function requireDavinciCallbackSecret(req, res, next) {
     return next();
 }
 
-function decodeIdToken(token) {
-    try {
-        if (!token) return null;
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const jsonPayload = Buffer.from(base64, 'base64').toString();
-        return JSON.parse(jsonPayload);
-    } catch (error) {
-        logger('DECODE_ERROR', 'Failed to parse ID Token claims.');
-        return null;
-    }
-}
-
 async function verifyIdToken(idToken) {
     const { createRemoteJWKSet, jwtVerify } = await import('jose');
 
@@ -296,7 +281,46 @@ function readDeliveredTokens(body) {
 }
 
 function getTransactionIDFromClaims(claims) {
-    return claims.bff_transaction_id || claims.transactionID || claims.transaction_id;
+    return claims.bff_transaction_id
+        || claims.bffTransactionID
+        || claims.bffTransactionId
+        || claims.transactionID
+        || claims.transactionId
+        || claims.transaction_id;
+}
+
+function getSafeClaimDiagnostics(claims) {
+    const transactionClaimKeys = [
+        'bff_transaction_id',
+        'bffTransactionID',
+        'bffTransactionId',
+        'transactionID',
+        'transactionId',
+        'transaction_id'
+    ];
+
+    return {
+        availableClaimKeys: Object.keys(claims).sort(),
+        transactionClaimsPresent: transactionClaimKeys.filter((key) => claims[key] !== undefined),
+        hasNonce: typeof claims.nonce === 'string',
+        nonceLength: typeof claims.nonce === 'string' ? claims.nonce.length : 0
+    };
+}
+
+function getSafeUserClaims(claims) {
+    if (!claims) return null;
+
+    return {
+        sub: claims.sub,
+        email: claims.email,
+        name: claims.name,
+        given_name: claims.given_name,
+        family_name: claims.family_name,
+        preferred_username: claims.preferred_username,
+        auth_time: claims.auth_time,
+        acr: claims.acr,
+        amr: claims.amr
+    };
 }
 
 function regenerateSession(req) {
@@ -390,7 +414,10 @@ app.post(
 
             if (!safeEqual(tokenTransactionID, transactionID)) {
                 logger('SECURITY', 'Rejected DaVinci callback with ID token transaction mismatch.', {
-                    transactionID
+                    transactionID,
+                    tokenTransactionIDPresent: typeof tokenTransactionID === 'string',
+                    tokenTransactionIDLength: typeof tokenTransactionID === 'string' ? tokenTransactionID.length : 0,
+                    ...getSafeClaimDiagnostics(claims)
                 });
                 return res.status(403).json({ error: 'Invalid token transaction binding' });
             }
@@ -517,68 +544,94 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
     }
 });
 
-app.post('/auth/login', authRateLimit, requireJsonBody, async (req, res) => {
-    logger('LOGIN_HANDOFF', 'Widget completed. Starting server-side token exchange.');
+app.post('/auth/finalize', authRateLimit, requireJsonBody, async (req, res) => {
+    logger('LOGIN_FINALIZE', 'Widget completed. Finalizing BFF session.');
 
     try {
-        const { sessionToken } = req.body || {};
-        if (typeof sessionToken !== 'string' || sessionToken.length < 10 || sessionToken.length > 4096) {
-            return res.status(400).json({ error: 'Invalid session token' });
+        const pending = req.session.authTransaction;
+        if (!pending?.transactionID || !pending?.nonce) {
+            return res.status(409).json({ error: 'No pending authentication transaction' });
         }
 
-        const sdkRes = await fetchJson(`${ORCHESTRATE_BASE_URL}/company/${COMPANY_ID}/sdktoken`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-SK-API-KEY': API_KEY
-            },
-            body: JSON.stringify({
-                policyId: POLICY_ID,
-                global: { sessionToken }
-            })
-        });
-        const sdkData = await parseJsonResponse(sdkRes, 'LOGIN_HANDOFF');
-
-        if (!sdkData.access_token) {
-            logger('LOGIN_HANDOFF', 'DaVinci did not return a backend SDK token.');
-            return res.status(502).json({ error: 'Unable to complete login' });
+        const transaction = authTransactions.get(pending.transactionID);
+        if (!transaction) {
+            return res.status(409).json({ error: 'Authentication transaction not ready' });
         }
 
-        const startRes = await fetchJson(`${API_ROOT}/${COMPANY_ID}/davinci/policy/${POLICY_ID}/start`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${sdkData.access_token}`,
-                'User-Agent': req.headers['user-agent'] || 'unknown'
-            }
-        });
-        const tokens = await parseJsonResponse(startRes, 'LOGIN_HANDOFF');
-
-        if (!tokens.access_token || !tokens.id_token) {
-            logger('LOGIN_HANDOFF', 'DaVinci did not return the expected OIDC tokens.');
-            return res.status(502).json({ error: 'Unable to complete login' });
+        if (transaction.sessionID !== req.sessionID) {
+            logger('SECURITY', 'Rejected finalize request for mismatched browser session.', {
+                transactionID: pending.transactionID
+            });
+            return res.status(403).json({ error: 'Invalid session binding' });
         }
+
+        if (!safeEqual(pending.nonce, transaction.nonce)) {
+            logger('SECURITY', 'Rejected finalize request for mismatched nonce.', {
+                transactionID: pending.transactionID
+            });
+            return res.status(403).json({ error: 'Invalid transaction binding' });
+        }
+
+        if (Date.now() > transaction.completeBy) {
+            authTransactions.delete(pending.transactionID);
+            return res.status(410).json({ error: 'Authentication transaction expired' });
+        }
+
+        if (transaction.status !== 'tokens_delivered' || !transaction.tokens?.id_token) {
+            return res.status(409).json({ error: 'Authentication transaction not complete' });
+        }
+
+        const tokens = transaction.tokens;
+        const idTokenClaims = transaction.idTokenClaims;
+        const user = getSafeUserClaims(idTokenClaims);
 
         await regenerateSession(req);
+        req.session.authenticated = true;
+        req.session.user = user;
+        req.session.subject = transaction.subject;
         req.session.access_token = tokens.access_token;
         req.session.refresh_token = tokens.refresh_token;
         req.session.id_token = tokens.id_token;
-        req.session.dv_session_token = tokens.sessionToken;
-        req.session.id_token_claims = decodeIdToken(tokens.id_token);
+        req.session.id_token_claims = idTokenClaims;
+        req.session.authenticatedAt = Date.now();
         await saveSession(req);
 
-        logger('LOGIN_HANDOFF', 'Session persisted. Login complete.');
-        return res.json({ result: 'ok' });
+        authTransactions.delete(pending.transactionID);
+
+        logger('LOGIN_FINALIZE', 'BFF session persisted. Login complete.', {
+            subject: transaction.subject
+        });
+
+        return res.json({ result: 'ok', user });
     } catch (error) {
-        logger('LOGIN_HANDOFF', 'Failed to complete login handoff.', { message: error.message });
+        logger('LOGIN_FINALIZE', 'Failed to finalize login.', { message: error.message });
         return res.status(500).json({ error: 'Internal Server Error' });
     }
+});
+
+app.post('/auth/login', authRateLimit, (req, res) => {
+    return res.status(410).json({ error: 'Session-token login handoff has been retired' });
+});
+
+app.get('/auth/session', apiRateLimit, (req, res) => {
+    if (!req.session?.authenticated) {
+        return res.status(401).json({ authenticated: false });
+    }
+
+    return res.json({
+        authenticated: true,
+        user: req.session.user || null
+    });
 });
 
 app.post('/auth/logout', authRateLimit, async (req, res) => {
     logger('LOGOUT', 'Destroying session.');
 
     try {
+        if (req.session?.authTransaction?.transactionID) {
+            authTransactions.delete(req.session.authTransaction.transactionID);
+        }
+
         await destroySession(req);
         res.clearCookie(SESSION_COOKIE_NAME, clearSessionCookieOptions);
         res.clearCookie('acme_session', { path: '/' });

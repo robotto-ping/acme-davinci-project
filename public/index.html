@@ -83,14 +83,68 @@
             widget: document.getElementById('widget-container')
         };
 
-        UI.guest.classList.remove('hidden');
-        UI.loading.classList.add('hidden');
         /**
          * SUCCESS HANDLER: Update UI with Claims
          */
         function showAuthenticatedState(user) {
+            UI.loading.classList.add('hidden');
+            UI.guest.classList.add('hidden');
             UI.auth.classList.remove('hidden');
+            UI.widget.innerHTML = '';
             UI.claims.innerText = JSON.stringify(user, null, 2);
+        }
+
+        function showGuestState() {
+            UI.loading.classList.add('hidden');
+            UI.auth.classList.add('hidden');
+            UI.guest.classList.remove('hidden');
+        }
+
+        function delay(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        async function checkSession() {
+            try {
+                const sessionRes = await fetch('/auth/session');
+                if (!sessionRes.ok) {
+                    showGuestState();
+                    return;
+                }
+
+                const session = await sessionRes.json();
+                if (session.authenticated) {
+                    showAuthenticatedState(session.user);
+                    return;
+                }
+            } catch (err) {
+                console.error("Session Check Failed:", err);
+            }
+
+            showGuestState();
+        }
+
+        async function finalizeLogin() {
+            for (let attempt = 0; attempt < 5; attempt++) {
+                const finalizeRes = await fetch('/auth/finalize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+
+                if (finalizeRes.ok) {
+                    return finalizeRes.json();
+                }
+
+                if (finalizeRes.status === 409) {
+                    await delay(300);
+                    continue;
+                }
+
+                throw new Error(`Finalize failed with HTTP ${finalizeRes.status}`);
+            }
+
+            throw new Error('Finalize failed because token delivery was not ready.');
         }
 
         /**
@@ -106,6 +160,11 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ })
                 });
+
+                if (!tokenRes.ok) {
+                    throw new Error(`Widget token request failed with HTTP ${tokenRes.status}`);
+                }
+
                 const { token, companyId, policyId, apiRoot } = await tokenRes.json();
 
                 // B. Render Widget
@@ -119,18 +178,19 @@
                     },
                     useModal: false,
                     successCallback: async (res) => {
-                        console.log("Widget finished, handing off to BFF...");
-                        
-                        const loginRes = await fetch('/auth/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ sessionToken: res.additionalProperties.sessionToken })
-                        });
-                        if (loginRes.ok) window.location.reload();
+                        try {
+                            console.log("Widget finished, finalizing BFF session...");
+
+                            const result = await finalizeLogin();
+                            showAuthenticatedState(result.user);
+                        } catch (err) {
+                            console.error("BFF Finalize Failed:", err);
+                            showGuestState();
+                        }
                     },
                     errorCallback: (err) => {
                         console.error("Widget Error:", err);
-                        UI.guest.classList.remove('hidden');
+                        showGuestState();
                     }
                 };
 
@@ -138,7 +198,7 @@
 
             } catch (err) {
                 console.error("Auth Initialization Failed:", err);
-                UI.guest.classList.remove('hidden');
+                showGuestState();
             }
         });
 
@@ -149,6 +209,8 @@
             await fetch('/auth/logout', { method: 'POST' });
             window.location.reload();
         }
+
+        checkSession();
     </script>
 </body>
 
