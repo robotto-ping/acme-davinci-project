@@ -478,9 +478,7 @@ app.post('/dvtoken', apiRateLimit, requireJsonBody, async (req, res) => {
                 parameters: {
                     transactionID: authTransaction.transactionID,
                     nonce: authTransaction.nonce,
-                    issuedAt: authTransaction.issuedAt,
-                    startBy: authTransaction.startBy,
-                    completeBy: authTransaction.completeBy
+                    expiresAt: authTransaction.startBy,
                 }
             })
         });
