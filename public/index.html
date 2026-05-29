@@ -74,9 +74,7 @@
     </div>
 
     <script>
-        // the Policy ID for the front-end (Widget) flow
-        const POLICY_ID = "53e36f1eacf651f2a80d2428cb5861ec";
-
+        
         const UI = {
             loading: document.getElementById('loading-state'),
             guest: document.getElementById('guest-state'),
@@ -106,7 +104,7 @@
                 const tokenRes = await fetch('/dvtoken', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ policyId: POLICY_ID })
+                    body: JSON.stringify({ })
                 });
                 const { token, companyId, apiRoot } = await tokenRes.json();
 
